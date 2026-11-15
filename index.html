@@ -412,6 +412,7 @@
       }
     }
   </style>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -769,6 +770,8 @@
 
           updateRowDisplay(id, appState[id].buyer, appState[id].handedOver);
           updateGlobalProgress();
+           // Dopisana linijka wysyłająca dane do Supabase:
+          syncItemToSupabase(id, appState[id].buyer, appState[id].handedOver);
         });
       });
 
@@ -783,6 +786,8 @@
 
           updateRowDisplay(id, appState[id].buyer, appState[id].handedOver);
           updateGlobalProgress();
+          // Dopisana linijka wysyłająca dane do Supabase:
+        syncItemToSupabase(id, appState[id].buyer, appState[id].handedOver);
         });
       });
     }
@@ -814,7 +819,105 @@
       document.getElementById('progress-bar').style.width = `${percent}%`;
     }
 
-    window.addEventListener('DOMContentLoaded', renderItems);
+    window.addEventListener('DOMContentLoaded', async () => {
+            renderItems();
+            await fetchRemoteState();
+            setupRealtimeListener();
+        });
   </script>
+      <!-- Biblioteka Supabase z CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <script>
+        // =========================================================================
+        // TUTAJ WKLEJ SWOJE DANE Z SUPABASE (pamiętaj o apostrofach wokół wartości)
+        // =========================================================================
+        const SUPABASE_URL = 'https://lygmxhufywyffhoyszmi.supabase.co/rest/v1/';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5Z214aHVmeXd5ZmZob3lzem1pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ3MjA2NjgsImV4cCI6MjExMDI5NjY2OH0.dj7SMHJfP1JxuNbNmNDkKQnlxJp6UQdk7jPT17X3fhA';
+        // =========================================================================
+
+        let supabase = null;
+        if (SUPABASE_URL !== 'TWOJ_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'TWOJ_SUPABASE_ANON_KEY') {
+            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        }
+
+        // Pobieranie danych z Supabase przy załadowaniu strony
+        async function loadSupabaseData() {
+            if (!supabase) return;
+
+            try {
+                const { data, error } = await supabase
+                    .from('items')
+                    .select('id, buyer, delivered');
+
+                if (error) {
+                    console.error('Błąd pobierania danych z Supabase:', error);
+                    return;
+                }
+
+                if (data && data.length > 0) {
+                    data.forEach(row => {
+                        appState[row.id] = {
+                            buyer: row.buyer || '',
+                            handedOver: !!row.delivered
+                        };
+                        updateRowDisplay(row.id, appState[row.id].buyer, appState[row.id].handedOver);
+                    });
+                    updateGlobalProgress();
+                }
+            } catch (err) {
+                console.error('Błąd połączenia z Supabase:', err);
+            }
+        }
+
+        // Zapis pojedynczej zmiany do Supabase
+        async function syncItemToSupabase(id, buyer, delivered) {
+            if (!supabase) return;
+
+            try {
+                const { error } = await supabase
+                    .from('items')
+                    .upsert({
+                        id: String(id),
+                        buyer: buyer || '',
+                        delivered: !!delivered,
+                        updated_at: new Date().toISOString()
+                    });
+
+                if (error) {
+                    console.error('Błąd zapisu do Supabase:', error);
+                }
+            } catch (err) {
+                console.error('Błąd wysyłania do Supabase:', err);
+            }
+        }
+
+        // Nasłuchiwanie zmian na żywo od innych użytkowników (Realtime)
+        function setupSupabaseRealtime() {
+            if (!supabase) return;
+
+            supabase
+                .channel('public:items')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'items' }, (payload) => {
+                    const row = payload.new;
+                    if (row && row.id) {
+                        appState[row.id] = {
+                            buyer: row.buyer || '',
+                            handedOver: !!row.delivered
+                        };
+                        updateRowDisplay(row.id, appState[row.id].buyer, appState[row.id].handedOver);
+                        updateGlobalProgress();
+                    }
+                })
+                .subscribe();
+        }
+
+        // Wywołanie przy starcie
+        window.addEventListener('DOMContentLoaded', () => {
+            loadSupabaseData();
+            setupSupabaseRealtime();
+        });
+    </script>
+
 </body>
 </html>
