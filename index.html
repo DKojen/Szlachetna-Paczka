@@ -819,11 +819,18 @@
       document.getElementById('progress-bar').style.width = `${percent}%`;
     }
 
-    window.addEventListener('DOMContentLoaded', async () => {
-            renderItems();
-            await fetchRemoteState();
-            setupRealtimeListener();
-        });
+window.addEventListener('DOMContentLoaded', () => {
+    renderItems();
+    loadSupabaseData();
+    try {
+        setupSupabaseRealtime();
+    } catch (e) {
+        console.warn('Realtime niedostępny, używam odpytywania');
+    }
+    // Zapasowe odświeżanie danych w tle co 5 sekund
+    setInterval(loadSupabaseData, 5000);
+});
+
           // Inicjalizacja Supabase
         const SUPABASE_URL = 'https://lygmxhufywyffhoyszmi.supabase.co/rest/v1/'; // wstaw swój adres
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5Z214aHVmeXd5ZmZob3lzem1pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ3MjA2NjgsImV4cCI6MjExMDI5NjY2OH0.dj7SMHJfP1JxuNbNmNDkKQnlxJp6UQdk7jPT17X3fhA'; // wstaw swój klucz anon
